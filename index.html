@@ -82,6 +82,50 @@
     </div>
   </div>
 
+
+  <!-- Edit name modal -->
+  <div id="editNameModal" class="modal-backdrop fixed inset-0 z-[55] hidden items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="editNameTitle">
+    <div class="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+      <div class="border-b border-slate-100 bg-gradient-to-br from-brand-50 to-white px-5 py-5 sm:px-6">
+        <div class="flex items-start gap-3">
+          <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-100 text-brand-700">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div id="editNameEyebrow" class="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-600">Edit name</div>
+            <h2 id="editNameTitle" class="mt-1 text-lg font-extrabold text-slate-900">Rename loan</h2>
+            <p id="editNameDescription" class="mt-1 text-sm leading-5 text-slate-500">Update the name used to identify this loan.</p>
+          </div>
+          <button type="button" onclick="closeEditNameModal()" class="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
+            <span class="text-lg leading-none">×</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="px-5 py-5 sm:px-6">
+        <label for="editNameInput" class="block text-sm font-semibold text-slate-700">Name</label>
+        <input id="editNameInput" type="text" maxlength="80" autocomplete="off"
+          class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+          placeholder="Enter a name" />
+        <p id="editNameError" class="mt-2 hidden text-xs font-semibold text-rose-600">Please enter a name.</p>
+
+        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onclick="closeEditNameModal()"
+            class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto">
+            Cancel
+          </button>
+          <button id="editNameSaveButton" type="button" onclick="confirmEditName()"
+            class="w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 sm:w-auto">
+            Save changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Delete confirmation modal -->
   <div id="deleteModal" class="modal-backdrop fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
     <div class="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl">
@@ -202,6 +246,7 @@
     let pendingDelete = null;
     let pendingPlanForTile = null;
     let pendingDeletePlanId = null;
+    let pendingEditName = null;
     let pendingCreateWorkspaceKeyHash = null;
     let pendingCreateWorkspaceKeyLabel = '';
     let currentKeyHash = null;
@@ -889,11 +934,12 @@ function logoutWorkspace() {
         acc.principal += c.principal;
         acc.interest += c.interest;
         acc.repayment += c.repayment;
+        acc.monthlyEmi += c.emi;
         acc.fees += c.fee;
         acc.tileCount += 1;
         acc.weightedRate += c.principal * Math.max(0, Number(tile.rate) || 0);
         return acc;
-      }, { principal: 0, interest: 0, repayment: 0, fees: 0, tileCount: 0, weightedRate: 0 });
+      }, { principal: 0, interest: 0, repayment: 0, monthlyEmi: 0, fees: 0, tileCount: 0, weightedRate: 0 });
     }
 
     function globalTotals() {
@@ -1009,12 +1055,24 @@ function logoutWorkspace() {
                 <div class="mt-1 truncate text-base font-extrabold text-brand-700">${money(t.interest)}</div>
               </div>
               <div class="rounded-2xl bg-slate-50 p-3">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Monthly EMI</div>
+                <div class="mt-1 truncate text-sm font-extrabold text-slate-800">${money(t.monthlyEmi)}</div>
+              </div>
+              <div class="rounded-2xl bg-slate-50 p-3">
                 <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Repayment</div>
                 <div class="mt-1 truncate text-sm font-bold text-slate-700">${money(t.repayment)}</div>
               </div>
-              <div class="rounded-2xl bg-slate-50 p-3">
-                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Avg. rate</div>
-                <div class="mt-1 text-sm font-bold text-slate-700">${avgRate ? avgRate.toFixed(2) + '%' : '—'}</div>
+              <div class="col-span-2 rounded-2xl bg-slate-50 p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Avg. rate</div>
+                    <div class="mt-1 text-sm font-bold text-slate-700">${avgRate ? avgRate.toFixed(2) + '%' : '—'}</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Loans</div>
+                    <div class="mt-1 text-sm font-bold text-slate-700">${t.tileCount}</div>
+                  </div>
+                </div>
               </div>
             </div>
           </button>
@@ -1068,9 +1126,10 @@ function logoutWorkspace() {
           </div>
 
           <div class="mb-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 min-w-0">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5 min-w-0">
               <div><div class="text-xs font-semibold text-slate-500">Principal</div><div data-plan-summary="principal" class="mt-1 truncate text-lg font-extrabold">${money(t.principal)}</div></div>
               <div><div class="text-xs font-semibold text-slate-500">Overall interest</div><div data-plan-summary="interest" class="mt-1 truncate text-lg font-extrabold text-brand-700">${money(t.interest)}</div></div>
+              <div><div class="text-xs font-semibold text-slate-500">Monthly EMI</div><div data-plan-summary="monthlyEmi" class="mt-1 truncate text-lg font-extrabold text-slate-900">${money(t.monthlyEmi)}</div></div>
               <div><div class="text-xs font-semibold text-slate-500">Total repayment</div><div data-plan-summary="repayment" class="mt-1 truncate text-lg font-extrabold">${money(t.repayment)}</div></div>
               <div><div class="text-xs font-semibold text-slate-500">Upfront fees</div><div data-plan-summary="fees" class="mt-1 truncate text-lg font-extrabold">${money(t.fees)}</div></div>
             </div>
@@ -1149,7 +1208,7 @@ function logoutWorkspace() {
 
         <!-- Plan summary -->
         <div class="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
-          <div class="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 sm:divide-y-0">
+          <div class="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-5 sm:divide-y-0">
             <div class="p-4 sm:p-5">
               <div class="flex items-center justify-between gap-2">
                 <div class="text-xs font-semibold text-slate-500">Loan principal</div>
@@ -1163,6 +1222,13 @@ function logoutWorkspace() {
                 <span class="rounded-lg bg-brand-50 px-2 py-1 text-[10px] font-bold text-brand-700">I</span>
               </div>
               <div class="metric-value mt-2 text-xl font-extrabold text-brand-700">${money(t.interest)}</div>
+            </div>
+            <div class="p-4 sm:p-5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-semibold text-slate-500">Monthly EMI</div>
+                <span class="rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">EMI</span>
+              </div>
+              <div class="metric-value mt-2 text-xl font-extrabold text-slate-900">${money(t.monthlyEmi)}</div>
             </div>
             <div class="p-4 sm:p-5">
               <div class="flex items-center justify-between gap-2">
@@ -1480,13 +1546,8 @@ function logoutWorkspace() {
 
     function renamePlan() {
       const plan = getActivePlan();
-      const name = prompt('Rename plan:', plan.name);
-      if (name === null) return;
-      const clean = name.trim();
-      if (!clean) return;
-      plan.name = clean;
-      view = 'detail';
-      saveState();
+      if (!plan) return;
+      openEditNameModal({ type: 'plan', id: plan.id, currentName: plan.name });
     }
 
     function addTile() {
@@ -1589,6 +1650,7 @@ function logoutWorkspace() {
           const valueMap = {
             principal: money(totals.principal),
             interest: money(totals.interest),
+            monthlyEmi: money(totals.monthlyEmi),
             repayment: money(totals.repayment),
             fees: money(totals.fees)
           };
@@ -1651,16 +1713,84 @@ function logoutWorkspace() {
 
     function editTileName(tileId) {
       const plan = getActivePlan();
-      const tile = plan.tiles.find(t => t.id === tileId);
+      const tile = plan?.tiles.find(t => t.id === tileId);
       if (!tile) return;
 
-      const name = prompt('Edit loan name:', tile.name);
-      if (name === null) return;
+      openEditNameModal({ type: 'tile', id: tile.id, currentName: tile.name });
+    }
 
-      const clean = name.trim();
-      if (!clean || clean === tile.name) return;
+    function openEditNameModal({ type, id, currentName }) {
+      const modal = document.getElementById('editNameModal');
+      const input = document.getElementById('editNameInput');
+      const title = document.getElementById('editNameTitle');
+      const eyebrow = document.getElementById('editNameEyebrow');
+      const description = document.getElementById('editNameDescription');
+      const error = document.getElementById('editNameError');
 
-      tile.name = clean;
+      if (!modal || !input) return;
+
+      pendingEditName = { type, id, currentName };
+
+      const isPlan = type === 'plan';
+      if (eyebrow) eyebrow.textContent = isPlan ? 'Edit plan' : 'Edit loan';
+      if (title) title.textContent = isPlan ? 'Rename plan' : 'Rename loan';
+      if (description) description.textContent = isPlan
+        ? 'Update the name used to identify this plan.'
+        : 'Update the name used to identify this loan.';
+
+      input.value = currentName || '';
+      if (error) error.classList.add('hidden');
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.classList.add('overflow-hidden');
+
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 50);
+    }
+
+    function closeEditNameModal() {
+      const modal = document.getElementById('editNameModal');
+      if (!modal) return;
+
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      pendingEditName = null;
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function confirmEditName() {
+      const input = document.getElementById('editNameInput');
+      const error = document.getElementById('editNameError');
+      if (!input || !pendingEditName) return;
+
+      const clean = input.value.trim();
+      if (!clean) {
+        if (error) error.classList.remove('hidden');
+        input.focus();
+        return;
+      }
+
+      if (clean === pendingEditName.currentName) {
+        closeEditNameModal();
+        return;
+      }
+
+      if (pendingEditName.type === 'plan') {
+        const plan = state.plans.find(p => p.id === pendingEditName.id);
+        if (!plan) return closeEditNameModal();
+        plan.name = clean;
+        view = 'detail';
+      } else {
+        const plan = getActivePlan();
+        const tile = plan?.tiles.find(t => t.id === pendingEditName.id);
+        if (!tile) return closeEditNameModal();
+        tile.name = clean;
+      }
+
+      closeEditNameModal();
       saveState();
     }
 
@@ -1821,6 +1951,7 @@ function logoutWorkspace() {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         closeNameModal();
+        closeEditNameModal();
         closeDeleteModal();
         closeDeletePlanModal();
         closeAmortization();
@@ -1829,6 +1960,14 @@ function logoutWorkspace() {
 
     document.getElementById('nameModal').addEventListener('click', e => {
       if (e.target.id === 'nameModal') closeNameModal();
+    });
+    document.getElementById('editNameModal').addEventListener('click', e => {
+      if (e.target.id === 'editNameModal') closeEditNameModal();
+    });
+
+    document.getElementById('editNameInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') confirmEditName();
+      if (e.key === 'Escape') closeEditNameModal();
     });
     document.getElementById('deleteModal').addEventListener('click', e => {
       if (e.target.id === 'deleteModal') closeDeleteModal();
