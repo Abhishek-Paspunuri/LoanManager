@@ -107,6 +107,58 @@
     </div>
   </div>
 
+  <!-- Create workspace confirmation modal -->
+  <div id="createWorkspaceModal" class="modal-backdrop fixed inset-0 z-[60] hidden items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="createWorkspaceTitle">
+    <div class="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+      <div class="border-b border-slate-100 bg-gradient-to-br from-brand-50 to-white px-5 py-5 sm:px-6">
+        <div class="flex items-start gap-3">
+          <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-100 text-brand-700">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <h2 id="createWorkspaceTitle" class="text-lg font-extrabold text-slate-900">Create new workspace?</h2>
+            <p class="mt-1 text-sm leading-5 text-slate-500">No workspace exists for this key yet.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-5 sm:px-6">
+        <p class="text-sm leading-6 text-slate-600">
+          Would you like to create a new shared workspace using this key?
+        </p>
+
+        <div class="mt-4 rounded-2xl border border-brand-100 bg-brand-50/70 px-4 py-3">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-brand-600">Workspace key</div>
+          <div id="createWorkspaceKeyText" class="mt-1 break-all font-mono text-sm font-bold text-slate-800"></div>
+        </div>
+
+        <div class="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+          <svg class="mt-0.5 shrink-0 text-amber-600" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 9v4M12 17h.01M10.3 4.9 2.8 18a2 2 0 0 0 1.75 3h14.9a2 2 0 0 0 1.75 3l-7.5-13.1a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p class="text-xs leading-5 text-amber-800">
+            Anyone who knows this key can access and modify the shared workspace.
+          </p>
+        </div>
+
+        <div id="createWorkspaceError" class="mt-4 hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold leading-5 text-rose-700"></div>
+
+        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button id="createWorkspaceCancelButton" type="button" onclick="closeCreateWorkspaceModal()"
+            class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto">
+            Cancel
+          </button>
+          <button id="createWorkspaceConfirmButton" type="button" onclick="confirmCreateWorkspace()"
+            class="w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 sm:w-auto">
+            Create workspace
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Amortization modal -->
   <div id="amortModal" class="modal-backdrop fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-3 sm:p-5">
     <div class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
@@ -149,6 +201,8 @@
     let pendingDelete = null;
     let pendingPlanForTile = null;
     let pendingDeletePlanId = null;
+    let pendingCreateWorkspaceKeyHash = null;
+    let pendingCreateWorkspaceKeyLabel = '';
     let currentKeyHash = null;
     let saveTimer = null;
     let pollTimer = null;
@@ -402,7 +456,7 @@ function showKeyScreen(apiNotConfigured = false) {
 
             <input
               id="workspaceKeyInput"
-              type="password"
+              type="text"
               autocomplete="off"
               autocapitalize="none"
               spellcheck="false"
@@ -548,31 +602,34 @@ async function handleWorkspaceKeySubmit(event) {
 
     if (remote) {
       // Existing workspace
+      currentKeyHash = keyHash;
       state = normalizeState(remote);
-    } else {
-      // New workspace
-      state = structuredClone(defaultState);
 
-      // Immediately create it in Cloudflare KV
-      await saveCloudData();
+      // Remember only the HASH locally.
+      // The actual workspace key is never stored.
+      localStorage.setItem(KEY_HASH_CACHE, keyHash);
+
+      cacheLocal();
+
+      view = 'plans';
+
+      showMainShell();
+      startPolling();
+
+      setSyncStatus('Synced', 'success');
+      return;
     }
 
-    // Remember only the HASH locally.
-    // The actual workspace key is never stored.
-    localStorage.setItem(KEY_HASH_CACHE, keyHash);
+    // No workspace exists. Show the application's themed confirmation modal.
+    currentKeyHash = null;
+    pendingCreateWorkspaceKeyHash = keyHash;
+    pendingCreateWorkspaceKeyLabel = key;
 
-    cacheLocal();
+    button.disabled = false;
+    button.textContent = 'Open workspace';
 
-    view = 'plans';
-
-    showMainShell();
-
-    startPolling();
-
-    setSyncStatus(
-      remote ? 'Synced' : 'Workspace created',
-      'success'
-    );
+    showCreateWorkspaceModal(key);
+    return;
 
   } catch (error) {
 
@@ -622,6 +679,124 @@ function getWorkspaceErrorMessage(error) {
   return message || 'Unable to open workspace. Please try again.';
 }
 
+
+// ============================================================
+// CREATE WORKSPACE CONFIRMATION MODAL
+// ============================================================
+
+function showCreateWorkspaceModal(key) {
+  const modal = document.getElementById('createWorkspaceModal');
+  const keyText = document.getElementById('createWorkspaceKeyText');
+  const errorEl = document.getElementById('createWorkspaceError');
+  const confirmButton = document.getElementById('createWorkspaceConfirmButton');
+  const cancelButton = document.getElementById('createWorkspaceCancelButton');
+
+  if (!modal) return;
+
+  if (keyText) keyText.textContent = key;
+
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
+  }
+
+  if (confirmButton) {
+    confirmButton.disabled = false;
+    confirmButton.textContent = 'Create workspace';
+  }
+
+  if (cancelButton) cancelButton.disabled = false;
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  document.body.classList.add('overflow-hidden');
+}
+
+function closeCreateWorkspaceModal() {
+  const modal = document.getElementById('createWorkspaceModal');
+
+  if (!modal) return;
+
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+
+  pendingCreateWorkspaceKeyHash = null;
+  pendingCreateWorkspaceKeyLabel = '';
+
+  document.body.classList.remove('overflow-hidden');
+
+  setTimeout(() => {
+    document.getElementById('workspaceKeyInput')?.focus();
+  }, 50);
+}
+
+async function confirmCreateWorkspace() {
+  if (!pendingCreateWorkspaceKeyHash) {
+    closeCreateWorkspaceModal();
+    return;
+  }
+
+  const keyHash = pendingCreateWorkspaceKeyHash;
+  const confirmButton = document.getElementById('createWorkspaceConfirmButton');
+  const cancelButton = document.getElementById('createWorkspaceCancelButton');
+  const errorEl = document.getElementById('createWorkspaceError');
+
+  if (confirmButton) {
+    confirmButton.disabled = true;
+    confirmButton.textContent = 'Creating…';
+  }
+
+  if (cancelButton) cancelButton.disabled = true;
+
+  try {
+    currentKeyHash = keyHash;
+    state = structuredClone(defaultState);
+
+    await saveCloudData();
+
+    localStorage.setItem(KEY_HASH_CACHE, keyHash);
+    cacheLocal();
+
+    pendingCreateWorkspaceKeyHash = null;
+    pendingCreateWorkspaceKeyLabel = '';
+
+    const modal = document.getElementById('createWorkspaceModal');
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+    document.body.classList.remove('overflow-hidden');
+
+    view = 'plans';
+    showMainShell();
+    startPolling();
+    setSyncStatus('Workspace created', 'success');
+
+  } catch (error) {
+    console.error(error);
+    currentKeyHash = null;
+
+    if (confirmButton) {
+      confirmButton.disabled = false;
+      confirmButton.textContent = 'Create workspace';
+    }
+
+    if (cancelButton) cancelButton.disabled = false;
+
+    if (errorEl) {
+      errorEl.textContent = getWorkspaceErrorMessage(error);
+      errorEl.classList.remove('hidden');
+    }
+  }
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+
+  const modal = document.getElementById('createWorkspaceModal');
+
+  if (modal && !modal.classList.contains('hidden')) {
+    closeCreateWorkspaceModal();
+  }
+});
 
 // ============================================================
 // SWITCH WORKSPACE
